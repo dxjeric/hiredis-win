@@ -1,0 +1,52 @@
+/hiredis-test
+/examples/hiredis-example*
+/*.o
+/*.so
+/*.dylib
+/*.a
+/*.pc
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+#vs 
+*.sdf
+*.opensdf
+*.suo
+*.user
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+*.bin
+
+# Executables
+*.exe
+*.out
+*.app
+
+# swp
+*.swp
+
+# log file
+*.log
+
+# dir
+Debug
