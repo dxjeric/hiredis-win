@@ -59,7 +59,9 @@
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
-#include <windows.h>
+#include <Ws2tcpip.h>
+
+#define strdup _strdup
 #endif
 #include "net.h"
 #include "sds.h"
@@ -117,7 +119,11 @@ static int redisSetBlocking(redisContext *c, int blocking) {
      * Note that fcntl(2) for F_GETFL and F_SETFL can't be
      * interrupted by a signal. */
 #ifdef _WIN32
-	if (ioctlsocket(c->fd, FIONBIO, &blocking) == SOCKET_ERROR )
+	if (ioctlsocket(c->fd, FIONBIO, &blocking) == SOCKET_ERROR){
+		__redisSetErrorFromErrno(c, REDIS_ERR_IO, "ioctlsocket(FIONBIO)");
+		redisContextCloseFd(c);
+		return REDIS_ERR;
+	}
 #else
     if ((flags = fcntl(c->fd, F_GETFL)) == -1) {
         __redisSetErrorFromErrno(c,REDIS_ERR_IO,"fcntl(F_GETFL)");
@@ -216,6 +222,38 @@ static int redisContextTimeoutMsec(redisContext *c, long *result)
 }
 
 static int redisContextWaitReady(redisContext *c, long msec) {
+#ifdef _WIN32
+	fd_set writefds;
+	FD_ZERO(&writefds);
+	FD_SET(c->fd, &writefds);
+	struct timeval timeout;
+	timeout.tv_sec = (long)(msec/1000);
+	timeout.tv_usec = msec;
+
+	int ret = select(c->fd, NULL, &writefds, NULL, &timeout);
+	switch (ret)
+	{
+	case SOCKET_ERROR:
+	{
+		char errstr[128];
+		memset(errstr, 0, 128);
+		int en = WSAGetLastError(); 
+		snprintf(errstr, 127, "select error %d, %s", en, strerror(en));
+		__redisSetErrorFromErrno(c, REDIS_ERR_IO, errstr);
+		redisContextCloseFd(c);
+		return REDIS_ERR;
+	}
+	case 0:	// time out
+	{
+		errno = ETIMEDOUT;
+		__redisSetErrorFromErrno(c, REDIS_ERR_IO, NULL);
+		redisContextCloseFd(c);
+		return REDIS_ERR;
+	}
+	default:
+		return REDIS_OK;
+	}
+#else
     struct pollfd   wfd[1];
 
     wfd[0].fd     = c->fd;
@@ -238,9 +276,9 @@ static int redisContextWaitReady(redisContext *c, long msec) {
         if (redisCheckSocketError(c) != REDIS_OK)
             return REDIS_ERR;
 
-        return REDIS_OK;
+		return REDIS_OK;
     }
-
+#endif
     __redisSetErrorFromErrno(c,REDIS_ERR_IO,NULL);
     redisContextCloseFd(c);
     return REDIS_ERR;
@@ -442,6 +480,7 @@ int redisContextConnectBindTcp(redisContext *c, const char *addr, int port,
 }
 
 int redisContextConnectUnix(redisContext *c, const char *path, const struct timeval *timeout) {
+#ifdef linux
     int blocking = (c->flags & REDIS_BLOCK);
     struct sockaddr_un sa;
     long timeout_msec = -1;
@@ -487,5 +526,10 @@ int redisContextConnectUnix(redisContext *c, const char *path, const struct time
         return REDIS_ERR;
 
     c->flags |= REDIS_CONNECTED;
+#else
+	char buf[128];
+	snprintf(buf, sizeof(buf), "Can't use the interface on OS windows");
+	__redisSetError(c, REDIS_ERR_OTHER, buf);
+#endif
     return REDIS_OK;
 }

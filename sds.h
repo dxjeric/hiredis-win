@@ -44,7 +44,6 @@
 #include <stdarg.h>
 #include <stdint.h>
 #define inline __inline
-typedef unsigned int size_t;
 #define __pack 
 #endif
 typedef char *sds;

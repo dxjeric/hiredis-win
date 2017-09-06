@@ -34,7 +34,11 @@
 #include "fmacros.h"
 #include <string.h>
 #include <stdlib.h>
+#ifdef linux
 #include <unistd.h>
+#else
+#include <stdio.h>
+#endif
 #include <assert.h>
 #include <errno.h>
 #include <ctype.h>
@@ -799,11 +803,21 @@ int redisBufferRead(redisContext *c) {
     if (c->err)
         return REDIS_ERR;
 
+#ifdef _WIN32
+	nread = recv(c->fd, buf, sizeof(buf), 0);
+#else
     nread = read(c->fd,buf,sizeof(buf));
+#endif // _WIN32
     if (nread == -1) {
+#ifdef _WIN32
+		// windows 和 linux获取错误方式差别， 这里做特殊处理
+		if ((errno == EAGAIN && !(c->flags & REDIS_BLOCK)) || (errno == EINTR) || (GetLastError() == WSAEWOULDBLOCK)){
+#else
         if ((errno == EAGAIN && !(c->flags & REDIS_BLOCK)) || (errno == EINTR)) {
-            /* Try again later */
+#endif // _WIN32
+			/* Try again later */
         } else {
+			printf("recv error errno = %d, GetLastError() = %d\n", errno, GetLastError());
             __redisSetError(c,REDIS_ERR_IO,NULL);
             return REDIS_ERR;
         }
@@ -836,7 +850,11 @@ int redisBufferWrite(redisContext *c, int *done) {
         return REDIS_ERR;
 
     if (sdslen(c->obuf) > 0) {
+#ifdef _WIN32
+		nwritten = send(c->fd, c->obuf, sdslen(c->obuf), 0);
+#else
         nwritten = write(c->fd,c->obuf,sdslen(c->obuf));
+#endif
         if (nwritten == -1) {
             if ((errno == EAGAIN && !(c->flags & REDIS_BLOCK)) || (errno == EINTR)) {
                 /* Try again later */
@@ -879,6 +897,7 @@ int redisGetReply(redisContext *c, void **reply) {
     if (aux == NULL && c->flags & REDIS_BLOCK) {
         /* Write until done */
         do {
+			int ret = redisBufferWrite(c, &wdone);
             if (redisBufferWrite(c,&wdone) == REDIS_ERR)
                 return REDIS_ERR;
         } while (!wdone);

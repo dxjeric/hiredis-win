@@ -37,6 +37,7 @@
 #include <stdarg.h> /* for va_list */
 #ifdef _WIN32
 #include <windows.h>
+#define strerror_r(errno, buf, len) strerror_s((buf), (len), (errno))
 #else
 #include <sys/time.h> /* for struct timeval */
 #endif

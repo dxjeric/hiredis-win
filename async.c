@@ -32,7 +32,12 @@
 #include "fmacros.h"
 #include <stdlib.h>
 #include <string.h>
+#ifdef linux
 #include <strings.h>
+#else
+#define strcasecmp  _stricmp
+#define strncasecmp _strnicmp 
+#endif
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
@@ -389,7 +394,6 @@ static int __redisGetSubscribeCallback(redisAsyncContext *ac, redisReply *reply,
         de = dictFind(callbacks,sname);
         if (de != NULL) {
             memcpy(dstcb,dictGetEntryVal(de),sizeof(*dstcb));
-
             /* If this is an unsubscribe message, remove it. */
             if (strcasecmp(stype+pvariant,"unsubscribe") == 0) {
                 dictDelete(callbacks,sname);
